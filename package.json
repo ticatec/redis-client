@@ -1,0 +1,39 @@
+{
+  "name": "@ticatec/redis-client",
+  "version": "0.1.0",
+  "description": "This is a lightweight wrapper around ioredis, providing convenient methods for interacting with a Redis server. It also includes support for a mock Redis instance for testing purposes.",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "rm -rf ./lib && tsc",
+    "publish-public": "npm publish --access public"
+  },
+  "keywords": [
+    "redis",
+    "ioredis",
+    "redis-client",
+    "mock-redis",
+    "typescript",
+    "log4js"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ticatec/redis-client.git"
+  },
+  "author": "Henry Feng",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/ticatec/redis-client/issues"
+  },
+  "homepage": "https://github.com/ticatec/redis-client",
+  "dependencies": {
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.17",
+    "ioredis": "^5.3.2",
+    "ioredis-mock": "^8.9.0",
+    "log4js": "^6.7.0",
+    "@ticatec/singleton-log4js": "^0.0.3"
+  }
+}
