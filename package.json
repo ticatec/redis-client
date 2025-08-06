@@ -1,13 +1,26 @@
 {
   "name": "@ticatec/redis-client",
-  "version": "0.1.0",
-  "description": "This is a lightweight wrapper around ioredis, providing convenient methods for interacting with a Redis server. It also includes support for a mock Redis instance for testing purposes.",
+  "version": "0.2.0",
+  "description": "A lightweight TypeScript wrapper around ioredis with singleton pattern support, mock Redis for testing, and abstract caching framework.",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
+  "files": [
+    "lib/**/*",
+    "README.md",
+    "README_CN.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=16.0.0"
+  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "build": "rm -rf ./lib && tsc",
-    "publish-public": "npm publish --access public"
+    "clean": "rm -rf ./lib",
+    "prepublishOnly": "npm run build",
+    "publish-public": "npm publish --access public",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "echo \"No linting configured\" && exit 0",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [
     "redis",
@@ -15,25 +28,48 @@
     "redis-client",
     "mock-redis",
     "typescript",
-    "log4js"
+    "log4js",
+    "caching",
+    "cache-framework",
+    "singleton",
+    "json-serialization",
+    "ttl",
+    "redis-wrapper",
+    "data-caching",
+    "nodejs"
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/ticatec/redis-client.git"
+    "url": "git+https://github.com/ticatec/redis-client.git"
   },
-  "author": "Henry Feng",
+  "author": {
+    "name": "Henry Feng",
+    "email": "huili.f@gmail.com"
+  },
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/ticatec/redis-client/issues"
   },
-  "homepage": "https://github.com/ticatec/redis-client",
-  "dependencies": {
+  "homepage": "https://github.com/ticatec/redis-client#readme",
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/ticatec"
   },
+  "dependencies": {},
   "devDependencies": {
     "@types/node": "^20.11.17",
     "ioredis": "^5.3.2",
     "ioredis-mock": "^8.9.0",
-    "log4js": "^6.7.0",
-    "@ticatec/singleton-log4js": "^0.0.3"
+    "typescript": "^5.0.0"
+  },
+  "peerDependencies": {
+    "ioredis": "^5.0.0",
+    "ioredis-mock": "^8.0.0",
+    "log4js": "^6.7.0"
+  },
+  "peerDependenciesMeta": {
+    "log4js": {
+      "optional": true
+    }
   }
 }

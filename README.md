@@ -1,215 +1,320 @@
-
 # Ticatec Redis Client
 
-This is a lightweight wrapper around ioredis, providing convenient methods for interacting with a Redis server. It also includes support for a mock Redis instance for testing purposes.
+[中文](./README_CN.md) ｜ English
+
+[![Version](https://img.shields.io/npm/v/@ticatec/redis-client)](https://www.npmjs.com/package/@ticatec/redis-client)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+A lightweight TypeScript wrapper around ioredis, providing convenient methods for Redis operations with singleton pattern support. Features both real Redis connections and mock Redis for testing.
+
+## Features
+
+- **Singleton Pattern**: Easy-to-use singleton Redis client instance
+- **Mock Support**: Built-in mock Redis for testing environments
+- **TypeScript Support**: Full type definitions and IntelliSense support
+- **JSON Serialization**: Automatic JSON serialization/deserialization for objects
+- **Comprehensive Operations**: Support for strings, hashes, sets, and lists
+- **Caching Framework**: Abstract caching data management system
+- **Logging Integration**: Built-in logging with log4js
 
 ## Installation
 
 ```bash
-npm install @ticatec/redis-client ioredis ioredis-mock @ticatec/singleton-log4js
+npm install @ticatec/redis-client ioredis ioredis-mock log4js
 ```
 
-## Usage
+## Quick Start
 
-### Initialization
-
-First, you need to initialize the Redis client with your Redis server configuration.
+### Basic Usage
 
 ```typescript
 import RedisClient from '@ticatec/redis-client';
 
-async function main() {
-  const redisConfig = {
-    host: '127.0.0.1',
-    port: 6379,
-    // ... other ioredis options
-  };
+// Initialize with real Redis
+await RedisClient.init({
+  host: '127.0.0.1',
+  port: 6379,
+  // ... other ioredis options
+});
 
-  await RedisClient.init(redisConfig);
+const client = RedisClient.getInstance();
 
-  const redisClient = RedisClient.getInstance().client;
-  // Now you can use the redisClient instance
+// String operations
+await client.set('key', 'value', 3600); // with 1-hour TTL
+const value = await client.get('key');
+
+// Object operations with JSON serialization
+await client.set('user', { name: 'John', age: 30 });
+const user = await client.getObject('user');
+```
+
+### Testing with Mock Redis
+
+```typescript
+// Initialize with mock Redis (pass null)
+await RedisClient.init(null);
+
+const client = RedisClient.getInstance();
+await client.set('testKey', 'testValue');
+const value = await client.get('testKey');
+console.log(value); // 'testValue'
+```
+
+## API Reference
+
+### Core Methods
+
+#### String Operations
+- `set(key, value, seconds?)` - Set key-value pair with optional TTL
+- `get(key)` - Get value by key
+- `getObject(key)` - Get and parse JSON object
+- `del(key)` - Delete key
+- `expiry(key, seconds)` - Set expiration time
+
+#### Hash Operations
+- `hset(key, data, seconds?)` - Set hash fields
+- `hget(key, field)` - Get hash field value
+- `hgetall(key)` - Get all hash fields
+- `hsetnx(key, field, value)` - Set hash field if not exists
+
+#### Set Operations
+- `sadd(key, members, seconds)` - Add members to set
+- `scard(key)` - Get set cardinality
+- `isSetMember(key, value)` - Check set membership
+
+#### List Operations
+- `rpush(key, data, seconds?)` - Push to list tail
+- `lrange(key, start, end)` - Get list range
+- `lrangeObject(key, start, end)` - Get list range and parse JSON
+- `llen(key)` - Get list length
+- `lpop(key)` - Pop from list head
+
+### Caching Framework
+
+The caching framework provides a simple and flexible way to manage cached data with automatic key generation and TTL handling.
+
+#### AbstractCachedData
+
+Abstract base class for implementing cached data operations. It provides three core methods: `load()`, `save()`, and `clean()`:
+
+```typescript
+import { AbstractCachedData, GetKey } from '@ticatec/redis-client';
+
+interface User {
+  id: number;
+  name: string;
+  email: string;
+  createdAt: Date;
 }
 
-main();
+// Define a user cache using partial keys for flexibility
+class UserCache extends AbstractCachedData<User> {
+  constructor() {
+    // Key generator function accepts partial User object and TTL (1 hour)
+    super((key: Partial<User>) => `user:${key.id}`, 3600);
+  }
+  
+  // Custom method to get user data with caching
+  async getUser(id: number): Promise<User | null> {
+    try {
+      // Try to load from cache using partial key
+      const cached = await this.load({ id });
+      if (cached) {
+        return cached;
+      }
+    } catch (error) {
+      console.warn('Cache miss for user:', id);
+    }
+    
+    // If not in cache, fetch from database
+    const user = await this.fetchUserFromDatabase(id);
+    if (user) {
+      // Save to cache - the getKey function will extract id from user object
+      await this.save(user);
+    }
+    
+    return user;
+  }
+  
+  // Custom method to update user data
+  async updateUser(id: number, userData: Partial<User>): Promise<void> {
+    // Update in database
+    const updatedUser = await this.updateUserInDatabase(id, userData);
+    
+    // Update cache with new data
+    if (updatedUser) {
+      await this.save(updatedUser);
+    }
+  }
+  
+  // Custom method to invalidate user cache
+  async invalidateUser(id: number): Promise<void> {
+    await this.clean({ id });
+  }
+  
+  private async fetchUserFromDatabase(id: number): Promise<User | null> {
+    // Your database logic here
+    return null;
+  }
+  
+  private async updateUserInDatabase(id: number, userData: Partial<User>): Promise<User | null> {
+    // Your database update logic here
+    return null;
+  }
+}
+```
 
-//Or use MockRedis for testing
-async function test(){
-    await RedisClient.init(null); //init with null will use mock redis
-    const redisClient = RedisClient.getInstance().client;
-    await redisClient.set('testKey', 'testValue');
-    const value = await redisClient.get('testKey');
-    console.log(value); // testValue
+#### CachedDataManager
+
+Singleton manager for registering and retrieving caching instances:
+
+```typescript
+import { CachedDataManager } from '@ticatec/redis-client';
+
+// Initialize the manager
+const manager = CachedDataManager.getInstance();
+
+// Create and register cache instances
+const userCache = new UserCache();
+manager.register(UserCache, userCache);
+
+// Retrieve and use cache instances anywhere in your application
+const getUserCache = () => manager.get(UserCache);
+
+// Usage in your application
+async function handleUserRequest(userId: number): Promise<User | null> {
+  const cache = getUserCache();
+  if (cache) {
+    return await cache.getUser(userId);
+  }
+  return null;
+}
+```
+
+#### Advanced Usage Patterns
+
+**1. Different cache types with various TTLs:**
+
+```typescript
+class SessionCache extends AbstractCachedData<{ sessionId: string, data: any }> {
+  constructor() {
+    super(key => `session:${key.sessionId}`, 1800); // 30 minutes
+  }
 }
 
-test();
+class ConfigCache extends AbstractCachedData<{ key: string, value: any }> {
+  constructor() {
+    super(key => `config:${key.key}`, 86400); // 24 hours
+  }
+}
 ```
 
-### Methods
-
-#### `set(key: string, value: any, seconds: number = 0): Promise<void>`
-
-Sets a key-value pair in Redis. If the value is an object, it will be stringified as JSON.
-
--   `key`: The key to set.
--   `value`: The value to set.
--   `seconds`: The expiration time in seconds (optional, defaults to 0 for no expiration).
+**2. Composite keys for complex scenarios:**
 
 ```typescript
-const redisClient = RedisClient.getInstance().client;
-await RedisClient.getInstance().set('myKey', 'myValue', 60);
-await RedisClient.getInstance().set('myObject', { name: 'example' }, 120);
+interface UserPost {
+  userId: number;
+  postId: number;
+  title: string;
+  content: string;
+}
+
+class UserPostsCache extends AbstractCachedData<UserPost[]> {
+  constructor() {
+    super(
+      (key: { userId: number, page: number }) => 
+        `user:${key.userId}:posts:page:${key.page}`,
+      3600 // 1 hour
+    );
+  }
+  
+  async getUserPostsPage(userId: number, page: number): Promise<UserPost[]> {
+    const key = { userId, page };
+    
+    try {
+      return await this.load(key);
+    } catch (error) {
+      // Cache miss, fetch from API
+      const posts = await this.fetchPostsFromAPI(userId, page);
+      await this.save(posts);
+      return posts;
+    }
+  }
+  
+  private async fetchPostsFromAPI(userId: number, page: number): Promise<UserPost[]> {
+    // Your API logic here
+    return [];
+  }
+}
 ```
 
-#### `get(key: string): Promise<string | Buffer | number>`
+## Configuration
 
-Gets the value for a given key.
+### Redis Configuration
+
+Pass any valid ioredis configuration object:
 
 ```typescript
-const value = await RedisClient.getInstance().get('myKey');
-console.log(value);
+await RedisClient.init({
+  host: 'localhost',
+  port: 6379,
+  password: 'your-password',
+  db: 0,
+  retryDelayOnFailover: 100,
+  maxRetriesPerRequest: 3,
+  lazyConnect: true
+});
 ```
 
-#### `getObject(key: string): Promise<any>`
+### Logging
 
-Gets the value for a given key and parses it as a JSON object.
+The client uses log4js for logging. Configure logging in your application:
 
 ```typescript
-const obj = await RedisClient.getInstance().getObject('myObject');
-console.log(obj);
+import log4js from 'log4js';
+
+log4js.configure({
+  appenders: {
+    console: { type: 'console' }
+  },
+  categories: {
+    default: { appenders: ['console'], level: 'info' },
+    RedisClient: { appenders: ['console'], level: 'debug' }
+  }
+});
 ```
 
-#### `del(key: string): Promise<void>`
+## Error Handling
 
-Deletes a key.
+The client provides built-in error handling and logging:
 
-```typescript
-await RedisClient.getInstance().del('myKey');
-```
+- Connection errors are logged automatically
+- JSON parsing errors are handled gracefully
+- Redis command errors are propagated to the caller
 
-#### `expiry(key: string, seconds: number): Promise<void>`
+## Best Practices
 
-Sets the expiration time for a key.
+1. **Initialize once**: Call `RedisClient.init()` only once in your application
+2. **Use mock for tests**: Always use `init(null)` for unit tests
+3. **Handle JSON carefully**: Use `getObject()` for JSON data, `get()` for strings
+4. **Set appropriate TTLs**: Always consider setting expiration times for cached data
+5. **Use caching framework**: Extend `AbstractCachedData` for complex caching logic
 
-```typescript
-await RedisClient.getInstance().expiry('myKey', 30);
-```
+## Dependencies
 
-#### `hset(key: string, data: any, seconds: number = 0): Promise<void>`
-
-Sets a hash field.
-
-```typescript
-await RedisClient.getInstance().hset('myHash', { field1: 'value1', field2: 'value2' }, 60);
-```
-
-#### `hget(key: string, name: string): Promise<void>`
-
-Gets a hash field.
-
-```typescript
-await RedisClient.getInstance().hget('myHash', 'field1');
-```
-
-#### `hgetall(key: string): Promise<void>`
-
-Gets all hash fields.
-
-```typescript
-await RedisClient.getInstance().hgetall('myHash');
-```
-
-#### `hsetnx(key: string, name: string, value: string | Buffer | number): Promise<void>`
-
-Sets a hash field if it does not exist.
-
-```typescript
-await RedisClient.getInstance().hsetnx('myHash', 'field3', 'value3');
-```
-
-#### `sadd(key: string, arr: Array<string | Buffer | number>, seconds: number): Promise<void>`
-
-Adds members to a set.
-
-```typescript
-await RedisClient.getInstance().sadd('mySet', ['member1', 'member2'], 60);
-```
-
-#### `scard(key: string): Promise<number>`
-
-Gets the cardinality of a set.
-
-```typescript
-const cardinality = await RedisClient.getInstance().scard('mySet');
-console.log(cardinality);
-```
-
-#### `isSetMember(key: string, value: any): Promise<boolean>`
-
-Checks if a value is a member of a set.
-
-```typescript
-const isMember = await RedisClient.getInstance().isSetMember('mySet', 'member1');
-console.log(isMember);
-```
-
-#### `rpush(key: string, data: any, seconds: number = 0): Promise<void>`
-
-Appends a value to a list.
-
-```typescript
-await RedisClient.getInstance().rpush('myList', 'item1', 60);
-await RedisClient.getInstance().rpush('myList', { name: 'item2' }, 120);
-```
-
-#### `lrange(key: string, start: number, end: number): Promise<void>`
-
-Gets a range of elements from a list.
-
-```typescript
-await RedisClient.getInstance().lrange('myList', 0, -1);
-```
-
-#### `lrangeObject(key: string, start: number, end: number): Promise<Array<any>>`
-
-Gets a range of elements from a list and parses JSON elements.
-
-```typescript
-const list = await RedisClient.getInstance().lrangeObject('myList', 0, -1);
-console.log(list);
-```
-
-#### `llen(key: string): Promise<void>`
-
-Gets the length of a list.
-
-```typescript
-await RedisClient.getInstance().llen('myList');
-```
-
-#### `lpop(key: string): Promise<string>`
-
-Removes and returns the first element of a list.
-
-```typescript
-const firstItem = await RedisClient.getInstance().lpop('myList');
-console.log(firstItem);
-```
-
-
-## Contribution
-
-Contributions are welcome! Please submit issues and pull requests.
+- **ioredis** (^5.3.2): Redis client for Node.js
+- **ioredis-mock** (^8.9.0): Mock Redis implementation for testing
+- **log4js** (peer dependency): Logging framework
 
 ## License
 
-Copyright © 2023 Ticatec. All rights reserved.
+MIT License. See [LICENSE](LICENSE) file for details.
 
-This library is released under the MIT license. For details, see the [LICENSE](LICENSE) file.
+## Contributing
+
+Contributions are welcome! Please submit issues and pull requests to the [GitHub repository](https://github.com/ticatec/redis-client).
 
 ## Contact
 
-huili.f@gmail.com
-
-https://github.com/ticatec/redis-client
-
+- Email: huili.f@gmail.com
+- Repository: https://github.com/ticatec/redis-client
